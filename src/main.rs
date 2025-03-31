@@ -5,7 +5,7 @@ use crossterm::{
 };
 use ratatui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Alignment},
     style::{Color, Modifier, Style},
     text::Span,
     widgets::{Block, Borders, List, ListItem, Paragraph},
@@ -107,44 +107,26 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
-    // Create a layout
+    // Create a layout without the input area
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints(
             [
-                Constraint::Length(1),
-                Constraint::Length(3),
-                Constraint::Min(1),
-                Constraint::Length(3),
+                Constraint::Length(1),     // Title
+                Constraint::Min(1),        // Todos list
+                Constraint::Length(3),     // Help
             ]
             .as_ref(),
         )
-        .split(f.area()); // Changed from size() to area()
+        .split(f.area());
 
     // Title
-    let title = Paragraph::new("Todo App")
-        .style(Style::default().fg(Color::Cyan))
+    let title = Paragraph::new("[ To Do 🐀 ]")
+        .style(Style::default().fg(Color::LightYellow))
+        .alignment(Alignment::Center)
         .block(Block::default());
     f.render_widget(title, chunks[0]);
-
-    // Input
-    let input = Paragraph::new(app.current_input.as_str())
-        .style(match app.input_mode {
-            InputMode::Normal => Style::default(),
-            InputMode::Editing => Style::default().fg(Color::Yellow),
-        })
-        .block(Block::default().borders(Borders::ALL).title("Input"));
-    f.render_widget(input, chunks[1]);
-
-    // Set cursor position
-    if let InputMode::Editing = app.input_mode {
-        // Changed from set_cursor to set_cursor_position with a tuple
-        f.set_cursor_position((
-            chunks[1].x + app.current_input.len() as u16 + 1,
-            chunks[1].y + 1,
-        ));
-    }
 
     // Todos
     let todos: Vec<ListItem> = app
@@ -169,17 +151,51 @@ fn ui(f: &mut Frame, app: &mut App) {
         .highlight_style(Style::default().fg(Color::LightCyan))
         .highlight_symbol("> ");
 
-    f.render_stateful_widget(todos, chunks[2], &mut app.state);
+    f.render_stateful_widget(todos, chunks[1], &mut app.state);
 
     // Help
     let help_text = match app.input_mode {
         InputMode::Normal => {
-            "q: Quit | e: Edit | a: Add | d: Delete | Space: Toggle | ↑↓: Navigate"
+            "q: Quit | e: Edit | a: Add | d: Delete | Space: Toggle | j↑/k↓: Navigate"
         }
         InputMode::Editing => "Esc: Cancel | Enter: Save",
     };
     let help = Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))
         .block(Block::default().borders(Borders::ALL).title("Help"));
-    f.render_widget(help, chunks[3]);
+    f.render_widget(help, chunks[2]);
+
+    // Render the input popup only when in editing mode
+    if let InputMode::Editing = app.input_mode {
+        // Create a centered popup for the input
+        let area = f.area();
+        let popup_width = 60.min(area.width.saturating_sub(4));
+        let popup_height = 3;
+        let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+        let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+        
+        let popup_area = ratatui::layout::Rect::new(
+            popup_x,
+            popup_y,
+            popup_width,
+            popup_height,
+        );
+        
+        // Create a clear background for the popup
+        let clear = ratatui::widgets::Clear;
+        f.render_widget(clear, popup_area);
+
+        // Input popup
+        let input_title = if app.edit_mode { "Edit Todo" } else { "Add Todo" };
+        let input = Paragraph::new(app.current_input.as_str())
+            .style(Style::default().fg(Color::Yellow))
+            .block(Block::default().borders(Borders::ALL).title(input_title));
+        f.render_widget(input, popup_area);
+
+        // Set cursor position within the popup
+        f.set_cursor_position((
+            popup_area.x + app.current_input.len() as u16 + 1,
+            popup_area.y + 1,
+        ));
+    }
 }

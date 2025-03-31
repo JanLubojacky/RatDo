@@ -101,7 +101,16 @@ impl App {
     pub fn toggle_todo(&mut self) {
         if let Some(selected) = self.state.selected() {
             if !self.todos.is_empty() && selected < self.todos.len() {
+                // Store the previous completion state
+                let was_completed = self.todos[selected].completed;
+
+                // Toggle the completion status
                 self.todos[selected].completed = !self.todos[selected].completed;
+
+                // If todo was just marked as completed, move to the next item
+                if !was_completed && self.todos[selected].completed {
+                    self.next();
+                }
             }
         }
     }

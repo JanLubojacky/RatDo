@@ -127,7 +127,7 @@ fn ui(f: &mut Frame, app: &mut App) {
         .split(f.area());
 
     // Title
-    let title = Paragraph::new("Todo App")
+    let title = Paragraph::new("[ To Do 🐀]")
         .style(Style::default().fg(Color::Cyan))
         .alignment(Alignment::Center)
         .block(Block::default());

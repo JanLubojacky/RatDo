@@ -26,12 +26,14 @@ pub enum InputMode {
     Editing,
 }
 
+// Modify the App struct to track when we're in "pick mode"
 pub struct App {
     pub todos: Vec<Todo>,
     pub state: ListState,
     pub input_mode: InputMode,
     pub current_input: String,
     pub edit_mode: bool,
+    pub picking_mode: bool, // New field to track when we're in picking mode
 }
 
 impl App {
@@ -44,13 +46,21 @@ impl App {
             input_mode: InputMode::Normal,
             current_input: String::new(),
             edit_mode: false,
+            picking_mode: false,
         }
     }
 
+    // Toggle picking mode
+    pub fn toggle_picking_mode(&mut self) {
+        self.picking_mode = !self.picking_mode;
+    }
+
+    // Override next and previous to handle moving todos when in picking mode
     pub fn next(&mut self) {
         if self.todos.is_empty() {
             return;
         }
+
         let i = match self.state.selected() {
             Some(i) => {
                 if i >= self.todos.len() - 1 {
@@ -61,6 +71,25 @@ impl App {
             }
             None => 0,
         };
+
+        // Move the todo if we're in picking mode
+        if self.picking_mode && i != self.state.selected().unwrap_or(0) {
+            let current = self.state.selected().unwrap_or(0);
+
+            // Don't attempt to move if there's only one item
+            if self.todos.len() > 1 {
+                // Handle wrap-around case
+                if current == self.todos.len() - 1 && i == 0 {
+                    // Move from end to beginning
+                    let todo = self.todos.remove(current);
+                    self.todos.insert(0, todo);
+                } else {
+                    // Standard case - swap with the next item
+                    self.todos.swap(current, i);
+                }
+            }
+        }
+
         self.state.select(Some(i));
     }
 
@@ -68,6 +97,7 @@ impl App {
         if self.todos.is_empty() {
             return;
         }
+
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -78,6 +108,25 @@ impl App {
             }
             None => 0,
         };
+
+        // Move the todo if we're in picking mode
+        if self.picking_mode && i != self.state.selected().unwrap_or(0) {
+            let current = self.state.selected().unwrap_or(0);
+
+            // Don't attempt to move if there's only one item
+            if self.todos.len() > 1 {
+                // Handle wrap-around case
+                if current == 0 && i == self.todos.len() - 1 {
+                    // Move from beginning to end
+                    let todo = self.todos.remove(0);
+                    self.todos.push(todo);
+                } else {
+                    // Standard case - swap with the previous item
+                    self.todos.swap(current, i);
+                }
+            }
+        }
+
         self.state.select(Some(i));
     }
 

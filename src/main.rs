@@ -128,7 +128,7 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     // Title
     let title = Paragraph::new("[ To Do 🐀]")
-        .style(Style::default().fg(Color::Cyan))
+        .style(Style::default().fg(Color::Yellow))
         .alignment(Alignment::Center)
         .block(Block::default());
     f.render_widget(title, chunks[0]);
@@ -174,7 +174,7 @@ fn ui(f: &mut Frame, app: &mut App) {
             // Use a different highlight style when picking
             Style::default().fg(Color::Black).bg(Color::Yellow)
         } else {
-            Style::default().fg(Color::LightCyan)
+            Style::default().fg(Color::LightYellow)
         })
         .highlight_symbol(if app.picking_mode {
             " >>" // Different symbol when picking

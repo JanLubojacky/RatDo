@@ -205,7 +205,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     if let InputMode::Editing = app.input_mode {
         // Create a centered popup for the input
         let area = f.area();
-        let popup_width = 60.min(area.width.saturating_sub(4));
+        let popup_width = area.width.saturating_sub(10);
         let popup_height = 3;
         let popup_x = (area.width.saturating_sub(popup_width)) / 2;
         let popup_y = (area.height.saturating_sub(popup_height)) / 2;

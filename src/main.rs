@@ -339,7 +339,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     if app.show_page_selector {
         // Create a centered popup for the page selector
         let area = f.area();
-        let popup_width = area.width.min(50).max(30);
+        let popup_width = area.width.min(30).max(50);
         let popup_height = app.pages.len() as u16 + 2;
         let popup_x = (area.width.saturating_sub(popup_width)) / 2;
         let popup_y = (area.height.saturating_sub(popup_height)) / 2;

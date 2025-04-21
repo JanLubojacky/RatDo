@@ -3,7 +3,7 @@ use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
 use std::{
     env, fs, io,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

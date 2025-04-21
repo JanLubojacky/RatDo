@@ -1,7 +1,10 @@
 use chrono::{DateTime, Local};
 use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
-use std::{fs, io, path::Path};
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Todo {
@@ -336,8 +339,20 @@ impl App {
         }
     }
 
+    fn get_config_path() -> io::Result<PathBuf> {
+        let home = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "Home directory not found"))?;
+
+        Ok(PathBuf::from(home)
+            .join(".config")
+            .join("ratdo")
+            .join("todos.json"))
+    }
+
     pub fn load_todos(&mut self) -> io::Result<()> {
-        let path = Path::new("todos.json");
+        let path = Self::get_config_path()?;
+
         if path.exists() {
             let content = fs::read_to_string(path)?;
             self.pages = serde_json::from_str(&content).unwrap_or_else(|_| {
@@ -368,8 +383,15 @@ impl App {
     }
 
     pub fn save_todos(&self) -> io::Result<()> {
+        let path = Self::get_config_path()?;
+
+        // Ensure the directory exists
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
         let json = serde_json::to_string(&self.pages)?;
-        fs::write("todos.json", json)?;
+        fs::write(path, json)?;
         Ok(())
     }
 

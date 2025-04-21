@@ -1,10 +1,7 @@
 use chrono::{DateTime, Local};
 use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
-use std::{
-    env, fs, io,
-    path::PathBuf,
-};
+use std::{env, fs, io, path::PathBuf};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Todo {

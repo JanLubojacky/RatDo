@@ -278,7 +278,12 @@ impl App {
 
     pub fn add_todo(&mut self) {
         let todo = Todo::new(self.current_input.clone());
-        self.todos_mut().push(todo);
+        let insertion_index = match self.state.selected() {
+            Some(index) => index + 1,   // Insert after current selection
+            None => self.todos().len(), // If nothing selected, append to end
+        };
+        self.todos_mut().insert(insertion_index, todo);
+        self.state.select(Some(insertion_index)); // Move selection to the new todo
         self.current_input.clear();
     }
 
@@ -298,16 +303,8 @@ impl App {
         if let Some(selected) = self.state.selected() {
             let todos = self.todos_mut();
             if !todos.is_empty() && selected < todos.len() {
-                // Store the previous completion state
-                let was_completed = todos[selected].completed;
-
                 // Toggle the completion status
                 todos[selected].completed = !todos[selected].completed;
-
-                // If todo was just marked as completed, move to the next item
-                if !was_completed && todos[selected].completed {
-                    self.next();
-                }
             }
         }
     }

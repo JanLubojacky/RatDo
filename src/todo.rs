@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use edtui::{EditorMode, EditorState, Lines};
 use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
 use std::{env, fs, io, path::PathBuf};
@@ -48,7 +49,7 @@ pub struct App {
     pub state: ListState,
     pub page_select_state: ListState,
     pub input_mode: InputMode,
-    pub current_input: String,
+    pub editor_state: EditorState,
     pub edit_mode: bool,
     pub picking_mode: bool,
     pub show_page_selector: bool,
@@ -72,7 +73,7 @@ impl App {
             state,
             page_select_state,
             input_mode: InputMode::Normal,
-            current_input: String::new(),
+            editor_state: EditorState::default(),
             edit_mode: false,
             picking_mode: false,
             show_page_selector: false,
@@ -276,15 +277,32 @@ impl App {
         self.state.select(Some(i));
     }
 
+    pub fn open_editor(&mut self, text: &str, mode: EditorMode) {
+        self.editor_state = EditorState::new(Lines::from(text));
+        self.editor_state.mode = mode;
+    }
+
+    pub fn editor_text(&self) -> String {
+        self.editor_state.lines.to_string()
+    }
+
+    pub fn editor_is_blank(&self) -> bool {
+        self.editor_text().trim().is_empty()
+    }
+
+    pub fn reset_editor(&mut self) {
+        self.editor_state = EditorState::default();
+    }
+
     pub fn add_todo(&mut self) {
-        let todo = Todo::new(self.current_input.clone());
+        let todo = Todo::new(self.editor_text());
         let insertion_index = match self.state.selected() {
             Some(index) => index + 1,   // Insert after current selection
             None => self.todos().len(), // If nothing selected, append to end
         };
         self.todos_mut().insert(insertion_index, todo);
         self.state.select(Some(insertion_index)); // Move selection to the new todo
-        self.current_input.clear();
+        self.reset_editor();
     }
 
     pub fn delete_todo(&mut self) {
@@ -313,7 +331,8 @@ impl App {
         if let Some(selected) = self.state.selected() {
             let todos = self.todos();
             if !todos.is_empty() && selected < todos.len() {
-                self.current_input = todos[selected].description.clone();
+                let description = todos[selected].description.clone();
+                self.open_editor(&description, EditorMode::Normal);
                 self.input_mode = InputMode::Editing;
                 self.edit_mode = true;
             }
@@ -322,13 +341,12 @@ impl App {
 
     pub fn update_todo(&mut self) {
         if let Some(selected) = self.state.selected() {
-            // Clone first to avoid borrowing issues
-            let current_input_clone = self.current_input.clone();
-            self.current_input.clear();
+            let new_text = self.editor_text();
+            self.reset_editor();
 
             let todos = self.todos_mut();
             if !todos.is_empty() && selected < todos.len() {
-                todos[selected].description = current_input_clone;
+                todos[selected].description = new_text;
             }
         }
     }

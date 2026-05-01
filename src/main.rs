@@ -3,6 +3,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use edtui::{EditorEventHandler, EditorMode, EditorTheme, EditorView};
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout},
@@ -72,6 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+    let mut event_handler = EditorEventHandler::default();
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
@@ -91,7 +93,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                         KeyCode::Char('a') => {
                             app.input_mode = InputMode::Editing;
                             app.edit_mode = false; // Changed to false for adding new todos
-                            app.current_input = String::new();
+                            app.open_editor("", EditorMode::Insert);
                         }
                         KeyCode::Char('d') => app.delete_todo(),
                         KeyCode::Char(' ') => app.toggle_todo(),
@@ -118,35 +120,34 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                         KeyCode::Char('k') => app.previous(),
                         _ => {}
                     },
-                    InputMode::Editing => match key.code {
-                        KeyCode::Enter => {
-                            if app.show_page_selector && !app.current_input.is_empty() {
-                                // Add a new page
-                                app.add_page(app.current_input.clone());
-                                app.current_input.clear();
+                    InputMode::Editing => {
+                        if key.code == KeyCode::Enter {
+                            // Always save & close on Enter (single-line semantics)
+                            if app.show_page_selector && !app.editor_is_blank() {
+                                app.add_page(app.editor_text());
+                                app.reset_editor();
                                 app.show_page_selector = false;
-                                app.input_mode = InputMode::Normal;
-                            } else if app.edit_mode && !app.current_input.is_empty() {
+                            } else if app.edit_mode && !app.editor_is_blank() {
                                 app.update_todo();
-                            } else if !app.current_input.is_empty() {
+                            } else if !app.editor_is_blank() {
                                 app.add_todo();
+                            } else {
+                                app.reset_editor();
                             }
                             app.input_mode = InputMode::Normal;
                             app.edit_mode = false;
-                        }
-                        KeyCode::Char(c) => {
-                            app.current_input.push(c);
-                        }
-                        KeyCode::Backspace => {
-                            app.current_input.pop();
-                        }
-                        KeyCode::Esc => {
+                        } else if key.code == KeyCode::Esc
+                            && app.editor_state.mode == EditorMode::Normal
+                        {
+                            // Cancel: editor was already in Normal mode, second Esc closes
+                            app.reset_editor();
                             app.input_mode = InputMode::Normal;
                             app.edit_mode = false;
                             app.show_page_selector = false;
+                        } else {
+                            event_handler.on_key_event(key, &mut app.editor_state);
                         }
-                        _ => {}
-                    },
+                    }
                     InputMode::PageSelect => match key.code {
                         KeyCode::Enter => {
                             // Select the highlighted page
@@ -160,7 +161,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                             // Create a new page from the page selector
                             app.input_mode = InputMode::Editing;
                             app.edit_mode = false;
-                            app.current_input = String::new();
+                            app.open_editor("", EditorMode::Insert);
                             // Keep page selector flag true
                         }
                         KeyCode::Char('d') => {
@@ -320,9 +321,9 @@ fn ui(f: &mut Frame, app: &mut App) {
         }
         InputMode::Editing => {
             if app.show_page_selector {
-                "Esc: Cancel | Enter: Create Page"
+                "Enter: Create Page | Esc: Normal mode (Esc again: Cancel) | vim keys"
             } else {
-                "Esc: Cancel | Enter: Save"
+                "Enter: Save | Esc: Normal mode (Esc again: Cancel) | vim keys (i/h/j/k/l/w/b/dd/...)"
             }
         }
         InputMode::PageSelect => {
@@ -381,67 +382,51 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     // Render the input popup when in editing mode
     if let InputMode::Editing = app.input_mode {
-        if !app.show_page_selector {
-            // Create a centered popup for the input
-            let area = f.area();
+        let area = f.area();
+        let (popup_area, title) = if !app.show_page_selector {
             let popup_width = area.width.saturating_sub(40);
             let popup_height = 3;
             let popup_x = (area.width.saturating_sub(popup_width)) / 2;
             let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-
-            let popup_area =
-                ratatui::layout::Rect::new(popup_x, popup_y, popup_width, popup_height);
-
-            // Create a clear background for the popup
-            let clear = ratatui::widgets::Clear;
-            f.render_widget(clear, popup_area);
-
-            // Input popup
-            let input_title = if app.edit_mode {
-                "Edit Todo"
-            } else {
-                "Add Todo"
-            };
-            let input = Paragraph::new(app.current_input.as_str())
-                .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL).title(input_title));
-            f.render_widget(input, popup_area);
-
-            // Set cursor position within the popup
-            f.set_cursor_position((
-                popup_area.x + app.current_input.len() as u16 + 1,
-                popup_area.y + 1,
-            ));
+            let title = if app.edit_mode { "Edit Todo" } else { "Add Todo" };
+            (
+                ratatui::layout::Rect::new(popup_x, popup_y, popup_width, popup_height),
+                title,
+            )
         } else {
-            // Show the page creation popup
-            let area = f.area();
             let popup_width = 40;
             let popup_height = 3;
             let popup_x = (area.width.saturating_sub(popup_width)) / 2;
             let popup_y = (area.height.saturating_sub(popup_height)) / 2 - 5;
+            (
+                ratatui::layout::Rect::new(popup_x, popup_y, popup_width, popup_height),
+                "New Page Name",
+            )
+        };
 
-            let popup_area =
-                ratatui::layout::Rect::new(popup_x, popup_y, popup_width, popup_height);
+        f.render_widget(ratatui::widgets::Clear, popup_area);
 
-            // Create a clear background for the popup
-            let clear = ratatui::widgets::Clear;
-            f.render_widget(clear, popup_area);
+        let mode_label = match app.editor_state.mode {
+            EditorMode::Insert => " [INSERT] ",
+            EditorMode::Normal => " [NORMAL] ",
+            EditorMode::Visual => " [VISUAL] ",
+            EditorMode::Search => " [SEARCH] ",
+        };
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .title_bottom(mode_label);
 
-            // New page popup
-            let input = Paragraph::new(app.current_input.as_str())
-                .style(Style::default().fg(Color::Yellow))
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title("New Page Name"),
-                );
-            f.render_widget(input, popup_area);
+        let theme = EditorTheme::default()
+            .block(block)
+            .base(Style::default().fg(Color::Yellow))
+            .cursor_style(Style::default().bg(Color::Yellow).fg(Color::Black))
+            .selection_style(Style::default().bg(Color::DarkGray).fg(Color::Yellow))
+            .hide_status_line();
 
-            // Set cursor position within the popup
-            f.set_cursor_position((
-                popup_area.x + app.current_input.len() as u16 + 1,
-                popup_area.y + 1,
-            ));
-        }
+        f.render_widget(
+            EditorView::new(&mut app.editor_state).theme(theme),
+            popup_area,
+        );
     }
 }

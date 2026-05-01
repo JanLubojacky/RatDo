@@ -53,6 +53,8 @@ pub struct App {
     pub edit_mode: bool,
     pub picking_mode: bool,
     pub show_page_selector: bool,
+    dirty: bool,
+    pub last_save_error: Option<String>,
 }
 
 impl App {
@@ -77,6 +79,8 @@ impl App {
             edit_mode: false,
             picking_mode: false,
             show_page_selector: false,
+            dirty: false,
+            last_save_error: None,
         }
     }
 
@@ -104,6 +108,7 @@ impl App {
 
             // Update page select state
             self.page_select_state.select(Some(self.current_page_index));
+            self.dirty = true;
         }
     }
 
@@ -232,6 +237,7 @@ impl App {
                     // Standard case - swap with the next item
                     todos.swap(current, i);
                 }
+                self.dirty = true;
             }
         }
 
@@ -271,6 +277,7 @@ impl App {
                     // Standard case - swap with the previous item
                     todos.swap(current, i);
                 }
+                self.dirty = true;
             }
         }
 
@@ -303,6 +310,7 @@ impl App {
         self.todos_mut().insert(insertion_index, todo);
         self.state.select(Some(insertion_index)); // Move selection to the new todo
         self.reset_editor();
+        self.dirty = true;
     }
 
     pub fn delete_todo(&mut self) {
@@ -313,6 +321,7 @@ impl App {
                 if selected > 0 && selected == todos.len() {
                     self.state.select(Some(selected - 1));
                 }
+                self.dirty = true;
             }
         }
     }
@@ -323,6 +332,7 @@ impl App {
             if !todos.is_empty() && selected < todos.len() {
                 // Toggle the completion status
                 todos[selected].completed = !todos[selected].completed;
+                self.dirty = true;
             }
         }
     }
@@ -347,6 +357,7 @@ impl App {
             let todos = self.todos_mut();
             if !todos.is_empty() && selected < todos.len() {
                 todos[selected].description = new_text;
+                self.dirty = true;
             }
         }
     }
@@ -394,7 +405,7 @@ impl App {
         Ok(())
     }
 
-    pub fn save_todos(&self) -> io::Result<()> {
+    pub fn save_todos(&mut self) -> io::Result<()> {
         let path = Self::get_config_path()?;
 
         // Ensure the directory exists
@@ -403,8 +414,48 @@ impl App {
         }
 
         let json = serde_json::to_string(&self.pages)?;
-        fs::write(path, json)?;
+        // Atomic write: stage to a sibling temp file, then rename into place so
+        // a crash mid-write can never leave a half-written todos.json.
+        let tmp = path.with_extension("json.tmp");
+        fs::write(&tmp, json)?;
+        fs::rename(&tmp, &path)?;
+
+        self.dirty = false;
+        self.last_save_error = None;
         Ok(())
+    }
+
+    pub fn flush_if_dirty(&mut self) {
+        if !self.dirty {
+            return;
+        }
+        if let Err(e) = self.save_todos() {
+            self.last_save_error = Some(format!("autosave failed: {e}"));
+        }
+    }
+
+    pub fn delete_page(&mut self, index: usize) {
+        if self.pages.len() <= 1 || index >= self.pages.len() {
+            return;
+        }
+
+        self.pages.remove(index);
+
+        let new_selected = if index >= self.pages.len() {
+            self.pages.len() - 1
+        } else {
+            index
+        };
+        self.page_select_state.select(Some(new_selected));
+        self.current_page_index = new_selected;
+
+        if self.todos().is_empty() {
+            self.state.select(None);
+        } else {
+            self.state.select(Some(0));
+        }
+
+        self.dirty = true;
     }
 
     // Get a list of page names - helpful for CLI "show" command

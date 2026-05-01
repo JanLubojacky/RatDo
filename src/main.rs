@@ -163,26 +163,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                         KeyCode::Char('d') if app.pages.len() > 1 => {
                             // Delete the selected page (if there's more than one)
                             if let Some(selected) = app.page_select_state.selected() {
-                                app.pages.remove(selected);
-
-                                // Adjust current page index if needed
-                                if selected >= app.pages.len() {
-                                    app.page_select_state.select(Some(app.pages.len() - 1));
-                                } else {
-                                    app.page_select_state.select(Some(selected));
-                                }
-
-                                // Update current_page_index to match the new selection
-                                app.current_page_index =
-                                    app.page_select_state.selected().unwrap_or(0);
-
-                                // Reset todo selection for the new page
-                                let todo_count = app.todos().len();
-                                if todo_count > 0 {
-                                    app.state.select(Some(0));
-                                } else {
-                                    app.state.select(None);
-                                }
+                                app.delete_page(selected);
                             }
                         }
                         KeyCode::Down | KeyCode::Char('j') if !app.pages.is_empty() => {
@@ -223,6 +204,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 }
             }
         }
+
+        app.flush_if_dirty();
     }
 }
 
@@ -321,8 +304,13 @@ fn ui(f: &mut Frame, app: &mut App) {
         }
     };
 
-    let help = Paragraph::new(help_text)
-        .style(Style::default().fg(Color::Gray))
+    let (help_body, help_style) = match &app.last_save_error {
+        Some(err) => (err.as_str(), Style::default().fg(Color::Red)),
+        None => (help_text, Style::default().fg(Color::Gray)),
+    };
+
+    let help = Paragraph::new(help_body)
+        .style(help_style)
         .block(Block::default().borders(Borders::ALL).title("Help"));
     f.render_widget(help, chunks[2]);
 

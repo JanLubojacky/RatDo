@@ -378,7 +378,11 @@ fn ui(f: &mut Frame, app: &mut App) {
             let popup_height = 3;
             let popup_x = (area.width.saturating_sub(popup_width)) / 2;
             let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-            let title = if app.edit_mode { "Edit Todo" } else { "Add Todo" };
+            let title = if app.edit_mode {
+                "Edit Todo"
+            } else {
+                "Add Todo"
+            };
             (
                 ratatui::layout::Rect::new(popup_x, popup_y, popup_width, popup_height),
                 title,

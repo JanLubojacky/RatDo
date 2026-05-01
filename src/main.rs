@@ -85,10 +85,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                             app.save_todos()?;
                             return Ok(());
                         }
-                        KeyCode::Char('e') => {
-                            if !app.todos().is_empty() {
-                                app.start_editing();
-                            }
+                        KeyCode::Char('e') if !app.todos().is_empty() => {
+                            app.start_editing();
                         }
                         KeyCode::Char('a') => {
                             app.input_mode = InputMode::Editing;
@@ -97,10 +95,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                         }
                         KeyCode::Char('d') => app.delete_todo(),
                         KeyCode::Char(' ') => app.toggle_todo(),
-                        KeyCode::Char('p') => {
-                            if !app.todos().is_empty() {
-                                app.toggle_picking_mode();
-                            }
+                        KeyCode::Char('p') if !app.todos().is_empty() => {
+                            app.toggle_picking_mode();
                         }
                         KeyCode::Char('P') => {
                             // Toggle page selector
@@ -164,64 +160,58 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                             app.open_editor("", EditorMode::Insert);
                             // Keep page selector flag true
                         }
-                        KeyCode::Char('d') => {
+                        KeyCode::Char('d') if app.pages.len() > 1 => {
                             // Delete the selected page (if there's more than one)
-                            if app.pages.len() > 1 {
-                                if let Some(selected) = app.page_select_state.selected() {
-                                    app.pages.remove(selected);
+                            if let Some(selected) = app.page_select_state.selected() {
+                                app.pages.remove(selected);
 
-                                    // Adjust current page index if needed
-                                    if selected >= app.pages.len() {
-                                        app.page_select_state.select(Some(app.pages.len() - 1));
-                                    } else {
-                                        app.page_select_state.select(Some(selected));
-                                    }
+                                // Adjust current page index if needed
+                                if selected >= app.pages.len() {
+                                    app.page_select_state.select(Some(app.pages.len() - 1));
+                                } else {
+                                    app.page_select_state.select(Some(selected));
+                                }
 
-                                    // Update current_page_index to match the new selection
-                                    app.current_page_index =
-                                        app.page_select_state.selected().unwrap_or(0);
+                                // Update current_page_index to match the new selection
+                                app.current_page_index =
+                                    app.page_select_state.selected().unwrap_or(0);
 
-                                    // Reset todo selection for the new page
-                                    let todo_count = app.todos().len();
-                                    if todo_count > 0 {
-                                        app.state.select(Some(0));
-                                    } else {
-                                        app.state.select(None);
-                                    }
+                                // Reset todo selection for the new page
+                                let todo_count = app.todos().len();
+                                if todo_count > 0 {
+                                    app.state.select(Some(0));
+                                } else {
+                                    app.state.select(None);
                                 }
                             }
                         }
-                        KeyCode::Down | KeyCode::Char('j') => {
+                        KeyCode::Down | KeyCode::Char('j') if !app.pages.is_empty() => {
                             // Navigate down in page list
-                            if !app.pages.is_empty() {
-                                let i = match app.page_select_state.selected() {
-                                    Some(i) => {
-                                        if i >= app.pages.len() - 1 {
-                                            0
-                                        } else {
-                                            i + 1
-                                        }
+                            let i = match app.page_select_state.selected() {
+                                Some(i) => {
+                                    if i >= app.pages.len() - 1 {
+                                        0
+                                    } else {
+                                        i + 1
                                     }
-                                    None => 0,
-                                };
-                                app.page_select_state.select(Some(i));
-                            }
+                                }
+                                None => 0,
+                            };
+                            app.page_select_state.select(Some(i));
                         }
-                        KeyCode::Up | KeyCode::Char('k') => {
+                        KeyCode::Up | KeyCode::Char('k') if !app.pages.is_empty() => {
                             // Navigate up in page list
-                            if !app.pages.is_empty() {
-                                let i = match app.page_select_state.selected() {
-                                    Some(i) => {
-                                        if i == 0 {
-                                            app.pages.len() - 1
-                                        } else {
-                                            i - 1
-                                        }
+                            let i = match app.page_select_state.selected() {
+                                Some(i) => {
+                                    if i == 0 {
+                                        app.pages.len() - 1
+                                    } else {
+                                        i - 1
                                     }
-                                    None => 0,
-                                };
-                                app.page_select_state.select(Some(i));
-                            }
+                                }
+                                None => 0,
+                            };
+                            app.page_select_state.select(Some(i));
                         }
                         KeyCode::Esc | KeyCode::Char('P') => {
                             // Exit page select mode
@@ -340,7 +330,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     if app.show_page_selector {
         // Create a centered popup for the page selector
         let area = f.area();
-        let popup_width = area.width.min(30).max(50);
+        let popup_width = area.width.clamp(30, 50);
         let popup_height = app.pages.len() as u16 + 2;
         let popup_x = (area.width.saturating_sub(popup_width)) / 2;
         let popup_y = (area.height.saturating_sub(popup_height)) / 2;
@@ -388,7 +378,11 @@ fn ui(f: &mut Frame, app: &mut App) {
             let popup_height = 3;
             let popup_x = (area.width.saturating_sub(popup_width)) / 2;
             let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-            let title = if app.edit_mode { "Edit Todo" } else { "Add Todo" };
+            let title = if app.edit_mode {
+                "Edit Todo"
+            } else {
+                "Add Todo"
+            };
             (
                 ratatui::layout::Rect::new(popup_x, popup_y, popup_width, popup_height),
                 title,
